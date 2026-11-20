@@ -1,0 +1,53 @@
+name: Deploy Web (GitHub Pages)
+
+# 把 pages/ 发布为在线版（免安装）。
+# 行情数据体积大，不入库镜像到 pages/data；部署时从仓库根 data/kline 现复制。
+#
+# 首次启用：仓库 Settings → Pages → Source 选择 "GitHub Actions"。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pages/**"
+      - "data/kline/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 复制行情数据到站点根
+        run: |
+          mkdir -p pages/data/kline
+          cp data/kline/*.zip pages/data/kline/
+          cp data/kline/corpus_index.json pages/data/kline/
+          echo "站点内数据文件数：$(find pages/data/kline -name '*.zip' | wc -l)"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

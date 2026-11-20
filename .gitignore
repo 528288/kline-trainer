@@ -1,0 +1,61 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+*.spec.bak
+
+# ---------- Node / 前端 ----------
+node_modules/
+.vite/
+
+# ---------- Android / Gradle ----------
+.gradle/
+.kotlin/
+local.properties
+captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Gradle 构建产物（源码目录下的 build/）
+android/build/
+android/app/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---------- IDE ----------
+.idea/workspace.xml
+.idea/usage.statistics.xml
+.idea/shelf/
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/libraries/
+.idea/compiler.xml
+*.iml
+*.iws
+*.ipr
+out/
+.vscode/
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 运行时数据（不入库） ----------
+*.sqlite3
+*.db
+vip_prefs.json
+config.json
+
+# ---------- 构建产物 / 成品包（挂 GitHub Release，不入库）----------
+/release/
+/pages/data/
+pc/dist/
+pc/build/

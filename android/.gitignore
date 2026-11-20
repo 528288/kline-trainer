@@ -1,0 +1,21 @@
+# android/.gitignore
+# 行情数据由仓库根 data/kline 同步而来（scripts/sync_kline_assets.ps1），体积大、不入库。
+app/src/main/assets/kline/*.zip
+app/src/main/assets/kline/corpus_index.json
+
+build/
+app/build/
+.gradle/
+.kotlin/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+.idea/workspace.xml
+
+# 发布签名（绝不入库）
+keystore.properties
+*.jks
+*.keystore

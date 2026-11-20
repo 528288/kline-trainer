@@ -1,0 +1,28 @@
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import path from 'path'
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src')
+    }
+  },
+  server: {
+    host: '0.0.0.0',
+    port: 3001,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8765',
+        changeOrigin: true,
+        timeout: 600000
+      }
+    }
+  },
+  build: {
+    outDir: '../src/kline_trainer/static',
+    emptyOutDir: true
+  }
+})
+

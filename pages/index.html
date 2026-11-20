@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>K线训练器 · 在线版</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b24; --panel2:#1c2331; --line:#2a3546;
+    --text:#e6edf7; --muted:#8797ad; --up:#ef4444; --down:#22c55e;
+    --accent:#3b82f6; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  #app{display:flex;flex-direction:column;height:100%}
+
+  /* ---- 顶部工具条 ---- */
+  .toolbar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex-wrap:wrap;flex:0 0 auto}
+  .title{font-weight:700;font-size:15px;margin-right:4px;white-space:nowrap}
+  .title small{color:var(--muted);font-weight:400;font-size:11px;margin-left:6px}
+  button{font:inherit;font-size:12px;padding:5px 11px;border-radius:7px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);cursor:pointer;transition:.15s;white-space:nowrap}
+  button:hover:not(:disabled){background:#243044;border-color:#3a4a63}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);font-weight:600}
+  button.primary:hover:not(:disabled){background:#2f6fd0}
+  button.buy{background:#7f1d1d;border-color:#991b1b;color:#fff;font-weight:600}
+  button.buy:hover:not(:disabled){background:#991b1b}
+  button.sell{background:#14532d;border-color:#166534;color:#fff;font-weight:600}
+  button.sell:hover:not(:disabled){background:#166534}
+  .spacer{flex:1}
+
+  /* ---- 周期标签 ---- */
+  .periods{display:flex;gap:4px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--line);
+    overflow-x:auto;flex:0 0 auto;scrollbar-width:none}
+  .periods::-webkit-scrollbar{display:none}
+  .periods button{padding:3px 10px;font-size:12px}
+  .periods button.on{background:var(--accent);border-color:var(--accent)}
+
+  /* ---- 主区 ---- */
+  .main{flex:1;display:flex;min-height:0}
+  .chartwrap{flex:1;position:relative;min-width:0;background:#0b0f16}
+  canvas{display:block;width:100%;height:100%}
+
+  .side{width:250px;flex:0 0 auto;background:var(--panel);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0}
+  .side section{padding:9px 12px;border-bottom:1px solid var(--line)}
+  .side h4{margin:0 0 7px;font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+  .row{display:flex;justify-content:space-between;font-size:12px;padding:2px 0}
+  .row .k{color:var(--muted)}
+  .row .v{font-variant-numeric:tabular-nums}
+  .up{color:var(--up)} .down{color:var(--down)}
+  .trades{flex:1;overflow-y:auto;min-height:60px}
+  .trade{display:flex;justify-content:space-between;font-size:11.5px;padding:4px 0;border-bottom:1px solid #1f2836}
+  .trade .dir{font-weight:700;width:30px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .stat{background:var(--panel2);border-radius:6px;padding:6px 8px}
+  .stat .lbl{font-size:10px;color:var(--muted)}
+  .stat .val{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+
+  /* ---- 底部操作 ---- */
+  .actions{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);
+    border-top:1px solid var(--line);flex-wrap:wrap;flex:0 0 auto}
+  .progress{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .phase{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;
+    background:#3b2f14;color:var(--warn);margin-left:6px}
+
+  /* ---- 遮罩 / 弹窗 ---- */
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(8,11,16,.86);z-index:20;padding:24px;text-align:center}
+  .overlay .box{max-width:460px}
+  .overlay h2{margin:0 0 10px;font-size:20px}
+  .overlay p{color:var(--muted);font-size:13px;line-height:1.7;margin:0 0 16px}
+  .hidden{display:none!important}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#1f2937;
+    border:1px solid var(--line);padding:8px 16px;border-radius:8px;font-size:13px;z-index:50;
+    opacity:0;transition:.25s;pointer-events:none}
+  .toast.show{opacity:1}
+
+  @media (max-width:820px){
+    .side{display:none}
+    .title small{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="toolbar">
+    <div class="title">K线训练器 <small>在线版 · 数据全部在浏览器本地</small></div>
+    <button class="primary" id="btn-new">开始新一局</button>
+    <button id="btn-reveal">下一根</button>
+    <div class="spacer"></div>
+    <button id="btn-blind">标的已隐藏</button>
+  </div>
+
+  <div class="periods" id="periods"></div>
+
+  <div class="main">
+    <div class="chartwrap">
+      <canvas id="chart"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="box">
+          <h2>正在加载行情数据…</h2>
+          <p id="loading-text">准备中</p>
+        </div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <section>
+        <h4>当前标的</h4>
+        <div class="row"><span class="k">代码</span><span class="v" id="i-code">--</span></div>
+        <div class="row"><span class="k">周期</span><span class="v" id="i-period">日线</span></div>
+        <div class="row"><span class="k">进度</span><span class="v" id="i-progress">--</span></div>
+      </section>
+      <section>
+        <h4>当前 K 线</h4>
+        <div class="row"><span class="k">开盘</span><span class="v" id="i-open">--</span></div>
+        <div class="row"><span class="k">最高</span><span class="v" id="i-high">--</span></div>
+        <div class="row"><span class="k">最低</span><span class="v" id="i-low">--</span></div>
+        <div class="row"><span class="k">收盘</span><span class="v" id="i-close">--</span></div>
+        <div class="row"><span class="k">涨跌</span><span class="v" id="i-chg">--</span></div>
+      </section>
+      <section>
+        <h4>本局统计</h4>
+        <div class="stats">
+          <div class="stat"><div class="lbl">交易笔数</div><div class="val" id="s-count">0</div></div>
+          <div class="stat"><div class="lbl">胜率</div><div class="val" id="s-win">--</div></div>
+          <div class="stat"><div class="lbl">总盈亏</div><div class="val" id="s-pnl">0.00%</div></div>
+          <div class="stat"><div class="lbl">持仓</div><div class="val" id="s-pos">空仓</div></div>
+        </div>
+      </section>
+      <section class="trades" style="display:flex;flex-direction:column">
+        <h4>成交记录</h4>
+        <div id="trade-list" style="flex:1;overflow-y:auto"></div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="actions">
+    <span class="progress" id="p-label">--</span>
+    <span class="phase" id="p-phase">开盘</span>
+    <div class="spacer"></div>
+    <button class="buy" id="btn-buy" disabled>买入</button>
+    <button class="sell" id="btn-sell" disabled>卖出</button>
+    <button id="btn-flat" disabled>平仓</button>
+    <button id="btn-auto" disabled>自动播放</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* =========================================================
+   K线训练器 · 在线版（纯前端，无后端）
+   - 直接从仓库 data/kline/ 读取 zip 与 corpus_index.json
+   - 全部解析在浏览器完成，数据不出本机
+   ========================================================= */
+
+const $ = (id) => document.getElementById(id);
+
+/* ---------- 配置 ---------- */
+const CFG = {
+  dataRoot: "data/kline/",       // 相对本页；Pages 站点根 = pages/，也已镜像 data/
+  totalBars: 300,               // 每局取的日线根数
+  displayCount: 150,            // 已见历史
+  trainCount: 150,              // 待揭示
+  twoStep: true,                // 双步：先开、后收
+  autoIntervalMs: 1200,
+  startCapital: 100000,
+};
+
+const PERIODS = [
+  { key: "1d",   label: "日线",   file: "day.csv",   src: "1d" },
+  { key: "week", label: "周线",   file: "week.csv",  src: "week" },
+  { key: "month",label: "月线",   file: "month.csv", src: "month" },
+  { key: "60m",  label: "60分",   file: "60min.csv", src: "60m" },
+];
+const PERIOD_LABEL = Object.fromEntries(PERIODS.map(p => [p.key, p.label]));
+
+/* ---------- 状态 ---------- */
+const S = {
+  corpus: [],          // [{symbol, day_count, ...}]
+  session: null,       // { symbol, bars: {1d:{display,train}, ...}, splitDate }
+  period: "1d",
+  cursor: 0,           // 已揭示的训练根数
+  phase: "open",       // open | close
+  trades: [],
+  position: null,      // { price, qty }
+  autoTimer: null,
+  blind: true,
+  loading: false,
+};
+
+/* =========================================================
+   工具：zip 读取（最小 ZIP 解析，不依赖第三方库）
+   只支持 stored(0) / deflate(8)，够用——我们的 zip 是标准 deflate。
+   ========================================================= */
+async function readZipEntries(arrayBuffer) {
+  const dv = new DataView(arrayBuffer);
+  const u8 = new Uint8Array(arrayBuffer);
+
+  // 1. 从尾部找 End of Central Directory
+  let eocd = -1;
+  const minEocd = 22;
+  for (let i = arrayBuffer.byteLength - minEocd; i >= Math.max(0, arrayBuffer.byteLength - 65557); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("不是有效的 zip 文件");
+
+  const entryCount = dv.getUint16(eocd + 10, true);
+  let cdOffset = dv.getUint32(eocd + 16, true);
+
+  const entries = {};
+  let p = cdOffset;
+  for (let n = 0; n < entryCount; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method   = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen  = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const cmtLen   = dv.getUint16(p + 32, true);
+    const localOff = dv.getUint32(p + 42, true);
+    const name = new TextDecoder("utf-8").decode(u8.subarray(p + 46, p + 46 + nameLen));
+    entries[name] = { method, compSize, localOff };
+    p += 46 + nameLen + extraLen + cmtLen;
+  }
+
+  // 2. 按需解压
+  async function read(name) {
+    const e = entries[name];
+    if (!e) return null;
+    // local file header 长度可变（name/extra 长度与中央目录可能不同）
+    const lh = e.localOff;
+    if (dv.getUint32(lh, true) !== 0x04034b50) throw new Error("zip 局部头损坏: " + name);
+    const lNameLen  = dv.getUint16(lh + 26, true);
+    const lExtraLen = dv.getUint16(lh + 28, true);
+    const dataStart = lh + 30 + lNameLen + lExtraLen;
+    const comp = u8.subarray(dataStart, dataStart + e.compSize);
+
+    if (e.method === 0) {
+      return new TextDecoder("utf-8").decode(comp);
+    }
+    if (e.method === 8) {
+      if (typeof DecompressionStream === "undefined") {
+        throw new Error("当前浏览器不支持 DecompressionStream，请使用较新的 Chrome/Edge/Safari");
+      }
+      const ds = new DecompressionStream("deflate-raw");
+      const stream = new Blob([comp]).stream().pipeThrough(ds);
+      return await new Response(stream).text();
+    }
+    throw new Error("不支持的压缩方式: " + e.method);
+  }
+
+  return { names: Object.keys(entries), read };
+}
+
+/* =========================================================
+   CSV 解析 → {date, open, high, low, close, volume}
+   ========================================================= */
+function parseCsv(text) {
+  const lines = text.split(/\r?\n/);
+  if (!lines.length) return [];
+  let start = 0;
+  const head = lines[0].toLowerCase();
+  if (head.includes("date") || head.includes("open") || head.includes("time")) start = 1;
+
+  const out = [];
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const p = line.split(",");
+    if (p.length < 5) continue;
+    const date = p[0].trim();
+    const o = +p[1], h = +p[2], l = +p[3], c = +p[4];
+    if (!date || !isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) continue;
+    if (o <= 0 || h <= 0 || l <= 0 || c <= 0 || h < l) continue;
+    out.push({ date, open: o, high: h, low: l, close: c, volume: +p[5] || 0 });
+  }
+  out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return out;
+}
+
+/* ---------- 派生周期 ---------- */
+function aggGroup(g) {
+  return {
+    date: g[g.length - 1].date,
+    open: g[0].open,
+    high: Math.max(...g.map(x => x.high)),
+    low: Math.min(...g.map(x => x.low)),
+    close: g[g.length - 1].close,
+    volume: g.reduce((s, x) => s + (x.volume || 0), 0),
+  };
+}
+function aggByCount(bars, n) {
+  const r = [];
+  for (let i = 0; i + n <= bars.length; i += n) r.push(aggGroup(bars.slice(i, i + n)));
+  return r;
+}
+function aggCalendar(bars, kind) {
+  const groups = [];
+  let cur = null, curKey = null;
+  for (const b of bars) {
+    const d = b.date.slice(0, 10);
+    let key;
+    if (kind === "week") {
+      const dt = new Date(d + "T00:00:00Z");
+      const day = (dt.getUTCDay() + 6) % 7;         // 周一=0
+      const th = new Date(dt.getTime() - day * 864e5);
+      key = th.toISOString().slice(0, 10);           // 该周周一
+    } else if (kind === "month") {
+      key = d.slice(0, 7);
+    } else {
+      key = d.slice(0, 4);
+    }
+    if (cur && key !== curKey) { groups.push(cur); cur = null; }
+    curKey = key;
+    (cur ||= []).push(b);
+  }
+  if (cur) groups.push(cur);
+  return groups.map(aggGroup);
+}
+
+/* =========================================================
+   数据加载
+   ========================================================= */
+async function loadCorpus() {
+  setLoading("读取标的索引…");
+  const res = await fetch(CFG.dataRoot + "corpus_index.json", { cache: "no-cache" });
+  if (!res.ok) throw new Error("无法读取 corpus_index.json（" + res.status + "）");
+  const json = await res.json();
+  const entries = Array.isArray(json) ? json : (json.entries || []);
+  // 只保留日线足够的标的
+  S.corpus = entries.filter(e => (e.day_count || 0) >= CFG.totalBars);
+  if (!S.corpus.length) throw new Error("索引里没有可用标的");
+  return S.corpus.length;
+}
+
+async function buildSession(symbol) {
+  setLoading(`读取 ${symbol}.zip …`);
+  const res = await fetch(CFG.dataRoot + symbol + ".zip");
+  if (!res.ok) throw new Error(`读取 ${symbol}.zip 失败（${res.status}）`);
+  const buf = await res.arrayBuffer();
+  const zip = await readZipEntries(buf);
+
+  const day = parseCsv((await zip.read("day.csv")) || "");
+  if (day.length < CFG.totalBars) throw new Error(`${symbol} 日线不足 ${CFG.totalBars} 根`);
+
+  const window = day.slice(-CFG.totalBars);
+  const display = window.slice(0, CFG.displayCount);
+  const train = window.slice(CFG.displayCount, CFG.displayCount + CFG.trainCount);
+  const splitDate = display.length ? display[display.length - 1].date.slice(0, 10) : window[0].date.slice(0, 10);
+  const minDate = window[0].date.slice(0, 10);
+  const maxDate = window[window.length - 1].date.slice(0, 10);
+
+  const bars = { "1d": { display, train } };
+
+  // 原生周期（若 zip 内有）
+  for (const p of [{ key: "week", file: "week.csv" }, { key: "month", file: "month.csv" }, { key: "60m", file: "60min.csv" }]) {
+    let src = [];
+    try {
+      const txt = await zip.read(p.file);
+      if (txt) src = parseCsv(txt);
+    } catch (_) { /* 忽略单周期失败 */ }
+    if (p.key === "60m" && src.length) {
+      // 分钟线按日期分组做 2 根合成 120m
+      const byDay = {};
+      for (const b of src) (byDay[b.date.slice(0, 10)] ||= []).push(b);
+      const m120 = [];
+      for (const d of Object.keys(byDay).sort()) m120.push(...aggByCount(byDay[d].sort((a, b) => a.date < b.date ? -1 : 1), 2));
+      const ranged = src.filter(b => b.date.slice(0, 10) >= minDate && b.date.slice(0, 10) <= maxDate);
+      bars["60m"] = splitAt(ranged, splitDate);
+      bars["120m"] = splitAt(m120.filter(b => b.date.slice(0, 10) >= minDate && b.date.slice(0, 10) <= maxDate), splitDate);
+    } else if (src.length) {
+      bars[p.key] = splitAt(src.filter(b => b.date.slice(0, 10) >= minDate && b.date.slice(0, 10) <= maxDate), splitDate);
+    }
+  }
+
+  // 派生周期
+  bars.week ||= splitAt(aggCalendar(window, "week"), splitDate);
+  bars.month ||= splitAt(aggCalendar(window, "month"), splitDate);
+  bars.year = splitAt(aggCalendar(window, "year"), splitDate);
+  bars["3d"] = splitAt(aggByCount(window, 3), splitDate);
+  bars["5d"] = splitAt(aggByCount(window, 5), splitDate);
+
+  return { symbol, bars, splitDate, trainLen: train.length };
+}
+
+function splitAt(bars, splitDate) {
+  return {
+    display: bars.filter(b => b.date.slice(0, 10) <= splitDate),
+    train: bars.filter(b => b.date.slice(0, 10) > splitDate),
+  };
+}
+
+/* =========================================================
+   图表绘制（原生 Canvas）
+   ========================================================= */
+const cv = $("chart");
+const ctx2d = cv.getContext("2d");
+let view = { start: 0, count: 120 };   // 可见区间（下标）
+let drag = null;
+
+function visibleBars() {
+  const p = S.session?.bars[S.period];
+  if (!p) return { display: [], train: [] };
+  // 已揭示的训练根数（分钟级按比例近似：显示到切分日之后同比例的根）
+  let trainVisible = S.cursor;
+  if (S.period !== "1d") {
+    const ratio = S.session.trainLen ? S.cursor / S.session.trainLen : 0;
+    trainVisible = Math.floor((p.train?.length || 0) * ratio);
+  }
+  return { display: p.display || [], train: (p.train || []).slice(0, trainVisible) };
+}
+
+function allVisible() {
+  const { display, train } = visibleBars();
+  return display.concat(train);
+}
+
+function drawChart() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) {
+    cv.width = w * dpr; cv.height = h * dpr;
+  }
+  ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx2d.clearRect(0, 0, w, h);
+
+  const bars = allVisible();
+  if (!bars.length) return;
+
+  const padR = 58, padT = 10, padB = 22, padL = 6;
+  const volH = Math.round((h - padT - padB) * 0.2);
+  const priceH = h - padT - padB - volH - 6;
+
+  view.count = Math.max(20, Math.min(view.count, bars.length));
+  view.start = Math.max(0, Math.min(view.start, bars.length - view.count));
+  const slice = bars.slice(view.start, view.start + view.count);
+  if (!slice.length) return;
+
+  const hi = Math.max(...slice.map(b => b.high));
+  const lo = Math.min(...slice.map(b => b.low));
+  const pad = (hi - lo) * 0.06 || hi * 0.02 || 1;
+  const yMax = hi + pad, yMin = lo - pad;
+  const plotW = w - padL - padR;
+  const step = plotW / slice.length;
+  const bw = Math.max(1, Math.min(step * 0.7, 14));
+  const yOf = (v) => padT + priceH - ((v - yMin) / (yMax - yMin)) * priceH;
+
+  // 网格 + 价格轴
+  ctx2d.font = "10px ui-monospace,monospace";
+  ctx2d.textBaseline = "middle";
+  const gridN = 5;
+  for (let i = 0; i <= gridN; i++) {
+    const v = yMin + (yMax - yMin) * i / gridN;
+    const y = yOf(v);
+    ctx2d.strokeStyle = "#1b2430"; ctx2d.lineWidth = 1;
+    ctx2d.beginPath(); ctx2d.moveTo(padL, y); ctx2d.lineTo(w - padR, y); ctx2d.stroke();
+    ctx2d.fillStyle = "#64748b";
+    ctx2d.fillText(v.toFixed(2), w - padR + 6, y);
+  }
+
+  // K 线
+  slice.forEach((b, i) => {
+    const x = padL + i * step + step / 2;
+    const up = b.close >= b.open;
+    const col = up ? "#ef4444" : "#22c55e";
+    ctx2d.strokeStyle = col; ctx2d.fillStyle = col; ctx2d.lineWidth = 1;
+    ctx2d.beginPath();
+    ctx2d.moveTo(x, yOf(b.high)); ctx2d.lineTo(x, yOf(b.low)); ctx2d.stroke();
+    const yO = yOf(b.open), yC = yOf(b.close);
+    const top = Math.min(yO, yC), hh = Math.max(1, Math.abs(yC - yO));
+    if (up) {
+      // 空心阳线
+      ctx2d.fillStyle = "#0b0f16";
+      ctx2d.fillRect(x - bw / 2, top, bw, hh);
+      ctx2d.strokeRect(x - bw / 2, top, bw, hh);
+    } else {
+      ctx2d.fillRect(x - bw / 2, top, bw, hh);
+    }
+  });
+
+  // 成交量
+  const vMax = Math.max(...slice.map(b => b.volume || 0)) || 1;
+  const volTop = padT + priceH + 6;
+  slice.forEach((b, i) => {
+    const x = padL + i * step + step / 2;
+    const vh = ((b.volume || 0) / vMax) * volH;
+    ctx2d.fillStyle = b.close >= b.open ? "rgba(239,68,68,.45)" : "rgba(34,197,94,.45)";
+    ctx2d.fillRect(x - bw / 2, volTop + volH - vh, bw, vh);
+  });
+
+  // 日期轴（首/中/尾）
+  ctx2d.fillStyle = "#64748b";
+  ctx2d.textBaseline = "top";
+  const idxs = [0, Math.floor(slice.length / 2), slice.length - 1];
+  idxs.forEach((i, k) => {
+    const b = slice[i]; if (!b) return;
+    const x = padL + i * step + step / 2;
+    ctx2d.textAlign = k === 0 ? "left" : k === 2 ? "right" : "center";
+    ctx2d.fillText(String(b.date).slice(0, 10), x, h - padB + 5);
+  });
+  ctx2d.textAlign = "left";
+
+  // 最新价线
+  const last = slice[slice.length - 1];
+  const yl = yOf(last.close);
+  ctx2d.setLineDash([4, 4]);
+  ctx2d.strokeStyle = last.close >= last.open ? "#ef4444" : "#22c55e";
+  ctx2d.beginPath(); ctx2d.moveTo(padL, yl); ctx2d.lineTo(w - padR, yl); ctx2d.stroke();
+  ctx2d.setLineDash([]);
+  ctx2d.fillStyle = last.close >= last.open ? "#ef4444" : "#22c55e";
+  ctx2d.fillRect(w - padR + 2, yl - 7, padR - 4, 14);
+  ctx2d.fillStyle = "#fff"; ctx2d.textBaseline = "middle";
+  ctx2d.fillText(last.close.toFixed(2), w - padR + 5, yl);
+}
+
+/* ---- 缩放 / 拖动 ---- */
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const bars = allVisible().length;
+  const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+  const next = Math.round(view.count * factor);
+  view.count = Math.max(20, Math.min(bars, next));
+  drawChart();
+}, { passive: false });
+
+cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, start: view.start }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const bars = allVisible().length;
+  const step = cv.clientWidth / view.count;
+  const delta = Math.round((drag.x - e.clientX) / step);
+  view.start = Math.max(0, Math.min(bars - view.count, drag.start + delta));
+  drawChart();
+});
+cv.addEventListener("pointerup", () => { drag = null; });
+window.addEventListener("resize", () => drawChart());
+
+/* =========================================================
+   业务逻辑
+   ========================================================= */
+function setLoading(txt) {
+  $("loading-text").textContent = txt;
+}
+
+async function newSession() {
+  if (S.loading) return;
+  S.loading = true;
+  stopAuto();
+  $("overlay").classList.remove("hidden");
+  setLoading("随机抽取标的…");
+  try {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const pick = S.corpus[Math.floor(Math.random() * S.corpus.length)];
+      try {
+        const sess = await buildSession(pick.symbol);
+        S.session = sess;
+        S.cursor = 0;
+        S.phase = CFG.twoStep ? "open" : "close";
+        S.trades = [];
+        S.position = null;
+        S.period = "1d";
+        view = { start: Math.max(0, CFG.displayCount - 120), count: 120 };
+        renderPeriods();
+        renderAll();
+        $("overlay").classList.add("hidden");
+        toast(`新一局：${S.blind ? "隐藏标的" : pick.symbol}，共 ${sess.trainLen} 根待揭示`);
+        return;
+      } catch (err) {
+        console.warn("跳过", pick.symbol, err.message);
+      }
+    }
+    throw new Error("连续多次抽取失败，请检查数据");
+  } catch (err) {
+    $("overlay").classList.remove("hidden");
+    $("overlay").innerHTML = `<div class="box"><h2>加载失败</h2><p>${err.message}</p>
+      <button class="primary" onclick="location.reload()">重新加载</button></div>`;
+  } finally {
+    S.loading = false;
+  }
+}
+
+/* ---- 揭示一根 ---- */
+function revealNext() {
+  if (!S.session) return;
+  if (S.cursor >= S.session.trainLen) { toast("本局已结束"); return; }
+
+  if (CFG.twoStep && S.phase === "open") {
+    S.phase = "close";           // 先只揭开盘
+  } else {
+    S.phase = "open";
+    S.cursor++;
+  }
+  renderAll();
+  // 自动跟随横移到最新
+  autoScrollToEnd();
+}
+
+function autoScrollToEnd() {
+  const n = allVisible().length;
+  if (n > view.count) view.start = n - view.count;
+  drawChart();
+}
+
+/* ---- 下单 ---- */
+function priceNow() {
+  const bars = allVisible();
+  const b = bars[bars.length - 1];
+  if (!b) return null;
+  // 双步：开盘阶段按下开盘价成交；收盘阶段按收盘价
+  if (CFG.twoStep && S.phase === "open") return b.open;
+  return b.close;
+}
+
+function buy() {
+  const px = priceNow(); if (!px) return;
+  if (S.position) { toast("已持仓，请先平仓"); return; }
+  const qty = Math.floor(CFG.startCapital * 0.3 / px / 100) * 100 || 100;
+  S.position = { price: px, qty };
+  S.trades.push({ dir: "买", price: px, qty, pnl: null });
+  renderAll();
+}
+
+function sell() {
+  const px = priceNow(); if (!px) return;
+  if (!S.position) { toast("当前空仓"); return; }
+  closePosition(px);
+}
+
+function flat() {
+  const px = priceNow(); if (!px) return;
+  if (!S.position) { toast("当前空仓"); return; }
+  closePosition(px);
+}
+
+function closePosition(px) {
+  const pnlPct = ((px - S.position.price) / S.position.price) * 100;
+  S.trades.push({ dir: "卖", price: px, qty: S.position.qty, pnl: pnlPct });
+  S.position = null;
+  renderAll();
+  toast(`平仓 ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`);
+}
+
+/* ---- 自动播放 ---- */
+function toggleAuto() {
+  if (S.autoTimer) { stopAuto(); return; }
+  $("btn-auto").textContent = "停止播放";
+  S.autoTimer = setInterval(() => {
+    if (!S.session || S.cursor >= S.session.trainLen) { stopAuto(); return; }
+    revealNext();
+  }, CFG.autoIntervalMs);
+}
+function stopAuto() {
+  if (S.autoTimer) { clearInterval(S.autoTimer); S.autoTimer = null; }
+  $("btn-auto").textContent = "自动播放";
+}
+
+/* =========================================================
+   渲染
+   ========================================================= */
+function renderPeriods() {
+  const avail = S.session ? Object.keys(S.session.bars) : ["1d"];
+  const order = ["1d", "3d", "5d", "week", "month", "year", "60m", "120m"];
+  $("periods").innerHTML = order
+    .filter(k => avail.includes(k))
+    .map(k => `<button data-p="${k}" class="${k === S.period ? "on" : ""}">${PERIOD_LABEL[k] || k}</button>`)
+    .join("");
+  $("periods").querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => {
+      S.period = btn.dataset.p;
+      view.start = Math.max(0, allVisible().length - view.count);
+      renderPeriods(); renderAll();
+    };
+  });
+}
+
+function renderAll() {
+  if (!S.session) return;
+  const bars = allVisible();
+  const b = bars[bars.length - 1];
+  const total = S.session.trainLen;
+
+  // 顶部/侧栏信息
+  $("i-code").textContent = S.blind ? "******" : S.session.symbol;
+  $("i-period").textContent = PERIOD_LABEL[S.period] || S.period;
+  $("i-progress").textContent = `${Math.min(S.cursor, total)} / ${total}`;
+  $("p-label").textContent = `进度 ${Math.min(S.cursor, total)}/${total}`;
+  $("p-phase").textContent = CFG.twoStep ? (S.phase === "open" ? "开盘" : "收盘") : "整根";
+
+  if (b) {
+    $("i-open").textContent = b.open.toFixed(2);
+    $("i-high").textContent = b.high.toFixed(2);
+    $("i-low").textContent = b.low.toFixed(2);
+    // 双步开盘阶段不泄露收盘
+    const hideClose = CFG.twoStep && S.phase === "open";
+    $("i-close").textContent = hideClose ? "--" : b.close.toFixed(2);
+    const chg = hideClose ? null : ((b.close - b.open) / b.open) * 100;
+    const chgEl = $("i-chg");
+    if (chg === null) { chgEl.textContent = "--"; chgEl.className = "v"; }
+    else { chgEl.textContent = (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%"; chgEl.className = "v " + (chg >= 0 ? "up" : "down"); }
+    $("i-high").className = "v up";
+    $("i-low").className = "v down";
+  }
+
+  // 统计
+  const closed = S.trades.filter(t => t.pnl !== null);
+  const wins = closed.filter(t => t.pnl > 0).length;
+  const totalPnl = closed.reduce((s, t) => s + t.pnl, 0);
+  $("s-count").textContent = closed.length;
+  $("s-win").textContent = closed.length ? Math.round(wins / closed.length * 100) + "%" : "--";
+  const pnlEl = $("s-pnl");
+  pnlEl.textContent = (totalPnl >= 0 ? "+" : "") + totalPnl.toFixed(2) + "%";
+  pnlEl.className = "val " + (totalPnl >= 0 ? "up" : "down");
+  $("s-pos").textContent = S.position ? `持 ${S.position.qty} 股` : "空仓";
+
+  // 成交记录
+  $("trade-list").innerHTML = S.trades.slice().reverse().slice(0, 40).map(t => `
+    <div class="trade">
+      <span class="dir ${t.dir === "买" ? "up" : "down"}">${t.dir}</span>
+      <span>${t.price.toFixed(2)}</span>
+      <span>${t.qty}</span>
+      <span class="${t.pnl === null ? "" : t.pnl >= 0 ? "up" : "down"}">${t.pnl === null ? "--" : (t.pnl >= 0 ? "+" : "") + t.pnl.toFixed(2) + "%"}</span>
+    </div>`).join("") || `<div style="color:var(--muted);font-size:11.5px">暂无成交</div>`;
+
+  // 按钮可用性
+  const ended = S.cursor >= total;
+  $("btn-reveal").disabled = ended;
+  $("btn-buy").disabled = ended || !!S.position;
+  $("btn-sell").disabled = ended || !S.position;
+  $("btn-flat").disabled = ended || !S.position;
+  $("btn-auto").disabled = ended;
+
+  drawChart();
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+/* =========================================================
+   事件绑定 & 启动
+   ========================================================= */
+$("btn-new").onclick = newSession;
+$("btn-reveal").onclick = revealNext;
+$("btn-buy").onclick = buy;
+$("btn-sell").onclick = sell;
+$("btn-flat").onclick = flat;
+$("btn-auto").onclick = toggleAuto;
+$("btn-blind").onclick = () => {
+  S.blind = !S.blind;
+  $("btn-blind").textContent = S.blind ? "标的已隐藏" : "显示标的";
+  renderAll();
+};
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.code === "Space") { e.preventDefault(); revealNext(); }
+  if (e.key.toLowerCase() === "b") buy();
+  if (e.key.toLowerCase() === "s") sell();
+});
+
+(async function boot() {
+  try {
+    const n = await loadCorpus();
+    setLoading(`已索引 ${n} 只标的，准备第一局…`);
+    await newSession();
+  } catch (err) {
+    $("overlay").classList.remove("hidden");
+    $("overlay").innerHTML = `<div class="box"><h2>无法启动</h2>
+      <p>${err.message}</p>
+      <p style="font-size:12px">在线版需要从仓库的 <code>data/kline/</code> 就近加载数据。
+      如果这是在本地直接双击打开的 HTML，浏览器会拦截跨目录读取——请用仓库提供的本地服务器，
+      或访问 GitHub Pages 在线地址。</p></div>`;
+  }
+})();
+</script>
+</body>
+</html>

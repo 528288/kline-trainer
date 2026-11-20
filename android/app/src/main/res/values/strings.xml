@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">K线训练</string>
+    <string name="training">训练</string>
+    <string name="stats">统计</string>
+    <string name="settings">设置</string>
+    <string name="buy">买入</string>
+    <string name="sell">卖出</string>
+    <string name="close_position">平仓</string>
+    <string name="next_candle">下一根</string>
+    <string name="select_symbol">选择品种</string>
+    <string name="select_period">选择周期</string>
+    <string name="loading_data">正在初始化数据…</string>
+</resources>

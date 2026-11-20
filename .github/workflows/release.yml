@@ -1,0 +1,139 @@
+name: Release
+
+# 打 tag（v*）时自动构建 PC 版与 Android 版成品并挂到 GitHub Release。
+#
+# 需要配置的 Secrets：
+#   KEYSTORE_BASE64    release-keystore.jks 的 base64
+#   KEYSTORE_PASSWORD  keystore 口令
+#   KEY_ALIAS          签名别名（kline-trainer）
+#   KEY_PASSWORD       key 口令
+#
+# 行情数据（data/kline，约 147MB）保存在仓库里，CI 直接使用，无需额外下载。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pc:
+    name: PC 版（Windows）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 构建前端
+        working-directory: pc/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: 安装 PyInstaller
+        run: python -m pip install -r pc/requirements-build.txt
+
+      - name: 打包 exe
+        working-directory: pc
+        run: >
+          python -m PyInstaller --noconfirm --clean --onedir --name KLineTrainer
+          --paths src --add-data "src\kline_trainer\static;kline_trainer\static" run.py
+
+      - name: 组装成品目录（程序 + 行情数据）
+        shell: pwsh
+        run: |
+          $out = "release/KLineTrainer-PC"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item pc/dist/KLineTrainer/* $out -Recurse
+          Copy-Item data $out/data -Recurse
+          Copy-Item release/README.md $out/README.md
+          Compress-Archive -Path $out -DestinationPath "release/KLineTrainer-PC.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KLineTrainer-PC
+          path: release/KLineTrainer-PC.zip
+
+  android:
+    name: Android 版
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: 同步行情数据到 assets
+        shell: bash
+        run: |
+          mkdir -p android/app/src/main/assets/kline
+          cp data/kline/*.zip android/app/src/main/assets/kline/
+
+      - name: 还原签名文件
+        working-directory: android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > release-keystore.jks
+            {
+              echo "storeFile=release-keystore.jks"
+              echo "storePassword=$KS_PASS"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASS"
+            } > keystore.properties
+            echo "已写入发布签名配置"
+          else
+            echo "::warning::未配置 KEYSTORE_BASE64，将使用 debug 签名"
+          fi
+
+      - name: 构建 release APK
+        working-directory: android
+        run: gradle :app:assembleRelease --no-daemon
+
+      - name: 整理产物
+        run: |
+          mkdir -p release
+          cp android/app/build/outputs/apk/release/app-release.apk "release/KLineTrainer-android-${GITHUB_REF_NAME}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KLineTrainer-android
+          path: release/*.apk
+
+  publish:
+    name: 发布到 GitHub Release
+    needs: [pc, android]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/KLineTrainer-PC/*.zip
+            artifacts/KLineTrainer-android/*.apk
+          body_path: release/RELEASE_NOTES.md
+          fail_on_unmatched_files: false
