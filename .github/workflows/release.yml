@@ -11,10 +11,13 @@ name: Release
 # 行情数据（data/kline，约 147MB）保存在仓库里，CI 直接使用，无需额外下载。
 
 on:
-  push:
-    tags:
-      - "v*"
+  # 默认手动触发；需要自动发布时把 push.tags 加回来，并在仓库 Secrets 里配好
+  # KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD。
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布到的 tag（如 v1.0.0）；留空则只构建不上传"
+        required: false
 
 permissions:
   contents: write
@@ -122,7 +125,7 @@ jobs:
     name: 发布到 GitHub Release
     needs: [pc, android]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
     steps:
       - uses: actions/checkout@v4
 
@@ -132,6 +135,7 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             artifacts/KLineTrainer-PC/*.zip
             artifacts/KLineTrainer-android/*.apk

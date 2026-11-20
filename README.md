@@ -14,6 +14,19 @@
 
 ---
 
+## 立即开始（不想配环境）
+
+| 方式 | 链接 | 说明 |
+|---|---|---|
+| 🌐 **在线版** | https://528288.github.io/kline-trainer/ | 浏览器打开即用，数据全在本地，无需安装 |
+| 🖥 **PC 免安装包** | [Releases](https://github.com/528288/kline-trainer/releases/latest) → `KLineTrainer-PC-*.zip` | 解压双击 `KLineTrainer.exe`，已内置行情数据 |
+| 📱 **Android APK** | [Releases](https://github.com/528288/kline-trainer/releases/latest) → `KLineTrainer-android-*.apk` | 直接安装，已内置行情数据（Android 8.0+） |
+
+> Release 包都**内置了完整行情数据**，开箱即用。
+> 想从源码跑或自己打包，见下方「快速开始」。
+
+---
+
 ## 目录结构
 
 ```
@@ -28,9 +41,11 @@ kline-trainer/
 │   └── scripts/build_exe.ps1
 ├── data/
 │   └── kline/               # 行情数据：<代码>.zip，两个平台共用的唯一数据源
+├── pages/                   # GitHub Pages 在线版（站点根）
 ├── docs/
 │   ├── 数据格式.md
-│   └── 架构.md
+│   ├── 架构.md
+│   └── 发布说明.md
 └── LICENSE
 ```
 
@@ -133,6 +148,21 @@ pwsh -File scripts/sync_kline_assets.ps1   # 把 data/kline 同步进 assets
 
 - [docs/架构.md](docs/架构.md) —— 两端模块划分、数据流、存储设计
 - [docs/数据格式.md](docs/数据格式.md) —— zip / CSV 格式说明与校验要点
+- [docs/发布说明.md](docs/发布说明.md) —— 签名信息、CI 发布流程
+
+## 校验和
+
+Release 附件 SHA-256（自行核对下载完整性）：
+
+```text
+KLineTrainer-PC-v1.0.0.zip
+  4E1DF06B6F986E224402812DF0291C13B6F555FA1740B8FB65BAE59F5DB75105
+
+KLineTrainer-android-v1.0.0.apk
+  901909A843EE0CE8F8D7E3C3DCE53BF312B95779736CFFFBA2FC77479B1425CA
+```
+
+Windows 校验：`Get-FileHash <文件> -Algorithm SHA256`
 
 ---
 
